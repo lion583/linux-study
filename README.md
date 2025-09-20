@@ -64,6 +64,7 @@ int main(int argc, char **argv)
     
     int iClientNum = -1;
     
+    /*防止僵死进程*/
     signal(SIGCHLD,SIG_IGN);
     
     iSocketServer = socket(AF_INET, SOCK_STREAM, 0);
@@ -100,9 +101,10 @@ int main(int argc, char **argv)
         {
             iClientNum++;
             printf("Get connect from client %d : %s\n",  iClientNum, inet_ntoa(tSocketClientAddr.sin_addr));
+            /*fork()创建子进程处理这个客户端的请求*/
             if (!fork())
             {
-                /*zichengxv code*/
+                /*子进程代码*/
                 while (1)
                 {
                     
@@ -119,6 +121,7 @@ int main(int argc, char **argv)
                     }
                 }				
             }
+            /*父进程运行位置*/
         }
     }
     
@@ -197,6 +200,107 @@ int main(int argc, char **argv)
 	return 0;
 }
 ```
+ 
+### 多线程编程(2025年9月20日)
+1. 进程和线程
+    1. 进程是操作系统分配资源的基本单位，每个进程拥有独立的内存空间和资源，进程之间相互隔离。线程是进程中的执行单元，同一进程内的多个线程共享进程的资源（如内存），但每个线程有自己的执行栈和寄存器。简单来说，进程像一个房子，线程是房子里的工人，工人可以一起工作并共享房子的设施，但不同房子的工人互不干扰。
+    2. **进程之间传递信息占用资源大，效率低下，二线程之间(资源共享)传递信息占用空间小，效率高**
+    3. 在linux中调度是以线程为单位的，资源的分配是以进程为单位的
+2. 多线程的代码示例
+    1. 最基本的程序   
+    _warning_:在使用一个陌生函数的时候，查询man手册的时候，不仅要看函数需要包含的头文件，还需要看看是否需要链接其他库，默认库不需要在编译命令是时候链接，
+    例如：在编译线程相关的代码的时候需要链接pthread库，所以编译命令是：gcc pthread_test.c -o pthread_test -lpthread，也可以gcc pthread_test.c -o pthread_test -pthread(更加推荐使用，自动添加一些编译选项（如宏定义)
+    ```
+    #include <pthread.h>
+    #include <stdio.h>
+    #include <unistd.h>
+    
+    
+    static void *my_thread_func (void *data)
+    {
+        while (1)
+        {
+            sleep(1);
+        }
+    }
+    
+    
+    int main(int argc, char **argv)
+    {
+        /*保存线程ID */
+        pthread_t tid;
+        int ret;
+        
+        /* 1. 创建"接收线程"  ID，属性(指定新栈的大小，调度策列，优先级)，运行函数，传入参顺 */
+        ret = pthread_create(&tid, NULL, my_thread_func, NULL);
+        if (ret)
+        {
+            printf("pthread_create err!\n");
+            return -1;
+        }
+    
+    
+        /* 2. 主线程读取标准输入, 发给"接收线程" */
+        while (1)
+        {
+            sleep(1);
+        }
+        return 0;
+    }
+    ```
+    2. 使用信号量的示例
+    ```
+    #include <pthread.h>
+    #include <stdio.h>
+    #include <unistd.h>
+    #include <semaphore.h>
+    
+    static char g_buf[1000];
+    static sem_t g_sem;
+    static void *my_thread_func (void *data)
+    {
+        while (1)
+        {
+            //sleep(1);
+            /* 等待通知 */
+            //while (g_hasData == 0);
+            /*只有信号量为0的时候阻塞，在sem_post增加1后，这个函数不阻塞，对信号量减1，然后继续执行后续代码，再次到这个函数时，检查信号量是否为0*/
+            sem_wait(&g_sem);
+    
+            /* 打印 */
+            printf("recv: %s\n", g_buf);
+        }
+        return NULL;
+    }
+    
+    
+    int main(int argc, char **argv)
+    {
+        pthread_t tid;
+        int ret;
+    
+        sem_init(&g_sem, 0, 0);
+        
+        /* 1. 创建"接收线程" */
+        ret = pthread_create(&tid, NULL, my_thread_func, NULL);
+        if (ret)
+        {
+            printf("pthread_create err!\n");
+            return -1;
+        }
+    
+    
+        /* 2. 主线程读取标准输入, 发给"接收线程" */
+        while (1)
+        {
+            fgets(g_buf, 1000, stdin);
+    
+            /* 通知接收线程 */
+            sem_post(&g_sem);
+        }
+        return 0;
+    }
+    ```
 
 
 
