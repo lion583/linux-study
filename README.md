@@ -206,6 +206,8 @@ int main(int argc, char **argv)
     1. 进程是操作系统分配资源的基本单位，每个进程拥有独立的内存空间和资源，进程之间相互隔离。线程是进程中的执行单元，同一进程内的多个线程共享进程的资源（如内存），但每个线程有自己的执行栈和寄存器。简单来说，进程像一个房子，线程是房子里的工人，工人可以一起工作并共享房子的设施，但不同房子的工人互不干扰。
     2. **进程之间传递信息占用资源大，效率低下，二线程之间(资源共享)传递信息占用空间小，效率高**
     3. 在linux中调度是以线程为单位的，资源的分配是以进程为单位的
+
+
 2. 多线程的代码示例
     1. 最基本的程序   
     _warning_:在使用一个陌生函数的时候，查询man手册的时候，不仅要看函数需要包含的头文件，还需要看看是否需要链接其他库，默认库不需要在编译命令是时候链接，
@@ -214,8 +216,8 @@ int main(int argc, char **argv)
     #include <pthread.h>
     #include <stdio.h>
     #include <unistd.h>
-    
-    
+
+
     static void *my_thread_func (void *data)
     {
         while (1)
@@ -223,14 +225,14 @@ int main(int argc, char **argv)
             sleep(1);
         }
     }
-    
-    
+
+
     int main(int argc, char **argv)
     {
         /*保存线程ID */
         pthread_t tid;
         int ret;
-        
+    
         /* 1. 创建"接收线程"  ID，属性(指定新栈的大小，调度策列，优先级)，运行函数，传入参顺 */
         ret = pthread_create(&tid, NULL, my_thread_func, NULL);
         if (ret)
@@ -238,8 +240,8 @@ int main(int argc, char **argv)
             printf("pthread_create err!\n");
             return -1;
         }
-    
-    
+
+
         /* 2. 主线程读取标准输入, 发给"接收线程" */
         while (1)
         {
@@ -254,7 +256,7 @@ int main(int argc, char **argv)
     #include <stdio.h>
     #include <unistd.h>
     #include <semaphore.h>
-    
+
     static char g_buf[1000];
     static sem_t g_sem;
     static void *my_thread_func (void *data)
@@ -266,10 +268,131 @@ int main(int argc, char **argv)
             //while (g_hasData == 0);
             /*只有信号量为0的时候阻塞，在sem_post增加1后，这个函数不阻塞，对信号量减1，然后继续执行后续代码，再次到这个函数时，检查信号量是否为0*/
             sem_wait(&g_sem);
-    
+
             /* 打印 */
             printf("recv: %s\n", g_buf);
         }
+        return NULL;
+    }
+
+
+    int main(int argc, char **argv)
+    {
+        pthread_t tid;
+        int ret;
+
+        sem_init(&g_sem, 0, 0);
+    
+        /* 1. 创建"接收线程" */
+        ret = pthread_create(&tid, NULL, my_thread_func, NULL);
+        if (ret)
+        {
+            printf("pthread_create err!\n");
+            return -1;
+        }
+
+
+        /* 2. 主线程读取标准输入, 发给"接收线程" */
+        while (1)
+        {
+            fgets(g_buf, 1000, stdin);
+
+            /* 通知接收线程 */
+            sem_post(&g_sem);
+        }
+        return 0;
+    }
+    ```
+    3. 使用互斥锁的示例
+    ```
+    #include <pthread.h>
+    #include <stdio.h>
+    #include <unistd.h>
+    #include <semaphore.h>
+    #include <string.h>
+
+    static char g_buf[1000];
+    static sem_t g_sem;
+    static pthread_mutex_t g_tMutex  = PTHREAD_MUTEX_INITIALIZER;
+
+    static void *my_thread_func (void *data)
+    {
+    while (1)
+    {
+            //sleep(1);
+            /* 等待通知 */
+            //while (g_hasData == 0);
+            sem_wait(&g_sem);
+
+            /* 打印 使用互斥锁避免在打印或者写入的时候同时对同一个缓冲区操作*/
+            pthread_mutex_lock(&g_tMutex);
+            printf("recv: %s\n", g_buf);
+            pthread_mutex_unlock(&g_tMutex);
+        }
+
+        return NULL;
+    }
+
+
+    int main(int argc, char **argv)
+    {
+        pthread_t tid;
+        int ret;
+        char buf[1000];
+
+        sem_init(&g_sem, 0, 0);
+    
+        /* 1. 创建"接收线程" */
+        ret = pthread_create(&tid, NULL, my_thread_func, NULL);
+        if (ret)
+        {
+            printf("pthread_create err!\n");
+            return -1;
+        }
+
+
+        /* 2. 主线程读取标准输入, 发给"接收线程" */
+        while (1)
+        {
+            fgets(buf, 1000, stdin);
+            pthread_mutex_lock(&g_tMutex);
+            memcpy(g_buf, buf, 1000);
+            pthread_mutex_unlock(&g_tMutex);
+
+            /* 通知接收线程 */
+            sem_post(&g_sem);
+        }
+        return 0;
+    }
+   ```
+    4. 条件成立变量
+    ```
+    #include <pthread.h>
+    #include <stdio.h>
+    #include <unistd.h>
+    #include <semaphore.h>
+    #include <string.h>
+    
+    static char g_buf[1000];
+    static pthread_mutex_t g_tMutex  = PTHREAD_MUTEX_INITIALIZER;
+    static pthread_cond_t  g_tConVar = PTHREAD_COND_INITIALIZER;
+    
+    static void *my_thread_func (void *data)
+    {
+        while (1)
+        {
+            //sleep(1);
+            /* 等待通知 */
+            //while (g_hasData == 0);
+            pthread_mutex_lock(&g_tMutex);
+            /*条件成立就获得互斥量继续执行下去，条件不成立就释放互斥量继续等待*/
+            pthread_cond_wait(&g_tConVar, &g_tMutex);
+    
+            /* 打印 */
+            printf("recv: %s\n", g_buf);
+            pthread_mutex_unlock(&g_tMutex);
+        }
+    
         return NULL;
     }
     
@@ -278,9 +401,8 @@ int main(int argc, char **argv)
     {
         pthread_t tid;
         int ret;
+        char buf[1000];
     
-        sem_init(&g_sem, 0, 0);
-        
         /* 1. 创建"接收线程" */
         ret = pthread_create(&tid, NULL, my_thread_func, NULL);
         if (ret)
@@ -293,14 +415,17 @@ int main(int argc, char **argv)
         /* 2. 主线程读取标准输入, 发给"接收线程" */
         while (1)
         {
-            fgets(g_buf, 1000, stdin);
-    
-            /* 通知接收线程 */
-            sem_post(&g_sem);
+            fgets(buf, 1000, stdin);
+            pthread_mutex_lock(&g_tMutex);
+            memcpy(g_buf, buf, 1000);
+            pthread_cond_signal(&g_tConVar); /* 通知接收线程 */
+            pthread_mutex_unlock(&g_tMutex);
         }
         return 0;
     }
+    
     ```
+
 
 
 
