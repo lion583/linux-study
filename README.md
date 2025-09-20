@@ -28,3 +28,178 @@
 4. 解释tcp服务器端和客户端的流程：
    1. 服务器：fd = socket()创建一个基本端点   bind()绑定自己的ip和端口信息(把fd和ip端口绑定)  listen()开始检测数据  accept()建立一条连接 send()/recv()数据收发
    2. 客户端：fd = socket()创建一个基本端点  connect()连接服务器的ip和端口 send()/recv()数据收发
+
+5. 在tcp服务器端实现代码中，为了实现多个客户端连接，在accept到一个请求后就会使用fork()创建一个子进程来处理这个请求，父进程继续回到accept()等待下一个请求。
+```
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <signal.h>
+/* socket
+* bind
+  * listensocket()
+  * accept
+  * send/recv
+    */
+
+#define SERVER_PORT 8888
+#define BACKLOG     10
+
+int main(int argc, char **argv)
+{
+    int iSocketServer;
+    int iSocketClient;
+    struct sockaddr_in tSocketServerAddr;
+    struct sockaddr_in tSocketClientAddr;
+    int iRet;
+    int iAddrLen;
+    
+    int iRecvLen;
+    unsigned char ucRecvBuf[1000];
+    
+    int iClientNum = -1;
+    
+    signal(SIGCHLD,SIG_IGN);
+    
+    iSocketServer = socket(AF_INET, SOCK_STREAM, 0);
+    if (-1 == iSocketServer)
+    {
+        printf("socket error!\n");
+        return -1;
+    }
+    
+    tSocketServerAddr.sin_family      = AF_INET;
+    tSocketServerAddr.sin_port        = htons(SERVER_PORT);  /* host to net, short */
+    tSocketServerAddr.sin_addr.s_addr = INADDR_ANY;
+    memset(tSocketServerAddr.sin_zero, 0, 8);
+    
+    iRet = bind(iSocketServer, (const struct sockaddr *)&tSocketServerAddr, sizeof(struct sockaddr));
+    if (-1 == iRet)
+    {
+        printf("bind error!\n");
+        return -1;
+    }
+    
+    iRet = listen(iSocketServer, BACKLOG);
+    if (-1 == iRet)
+    {
+        printf("listen error!\n");
+        return -1;
+    }
+    
+    while (1)
+    {
+        iAddrLen = sizeof(struct sockaddr);
+        iSocketClient = accept(iSocketServer, (struct sockaddr *)&tSocketClientAddr, &iAddrLen);
+        if (-1 != iSocketClient)
+        {
+            iClientNum++;
+            printf("Get connect from client %d : %s\n",  iClientNum, inet_ntoa(tSocketClientAddr.sin_addr));
+            if (!fork())
+            {
+                /*zichengxv code*/
+                while (1)
+                {
+                    
+                    iRecvLen = recv(iSocketClient, ucRecvBuf, 999, 0);
+                    if (iRecvLen <= 0)
+                    {
+                        close(iSocketClient);
+                        return -1;
+                    }
+                    else
+                    {
+                        ucRecvBuf[iRecvLen] = '\0';
+                        printf("Get Msg From Client %d: %s\n", iClientNum, ucRecvBuf);
+                    }
+                }				
+            }
+        }
+    }
+    
+    close(iSocketServer);
+    return 0;
+}
+```
+
+6. tcp客户端实现代码
+```
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <stdio.h>
+
+/* socket
+* connect
+* send/recv
+  */
+
+#define SERVER_PORT 8888
+
+int main(int argc, char **argv)
+{
+    int iSocketClient;
+    struct sockaddr_in tSocketServerAddr;
+
+	int iRet;
+	unsigned char ucSendBuf[1000];
+	int iSendLen;
+
+	if (argc != 2)
+	{
+		printf("Usage:\n");
+		printf("%s <server_ip>\n", argv[0]);
+		return -1;
+	}
+
+	iSocketClient = socket(AF_INET, SOCK_STREAM, 0);
+
+	tSocketServerAddr.sin_family      = AF_INET;
+	tSocketServerAddr.sin_port        = htons(SERVER_PORT);  /* host to net, short */
+ 	//tSocketServerAddr.sin_addr.s_addr = INADDR_ANY;
+ 	if (0 == inet_aton(argv[1], &tSocketServerAddr.sin_addr))
+ 	{
+		printf("invalid server_ip\n");
+		return -1;
+	}
+	memset(tSocketServerAddr.sin_zero, 0, 8);
+
+
+	iRet = connect(iSocketClient, (const struct sockaddr *)&tSocketServerAddr, sizeof(struct sockaddr));	
+	if (-1 == iRet)
+	{
+		printf("connect error!\n");
+		return -1;
+	}
+
+	while (1)
+	{
+		if (fgets(ucSendBuf, 999, stdin))
+		{
+			iSendLen = send(iSocketClient, ucSendBuf, strlen(ucSendBuf), 0);
+			if (iSendLen <= 0)
+			{
+				close(iSocketClient);
+				return -1;
+			}
+		}
+	}
+	
+	return 0;
+}
+```
+
+
+
+
+
+
