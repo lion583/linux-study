@@ -470,9 +470,9 @@ int main(int argc, char **argv)
 1. I2C框架（在驱动大全部分会进一步更新）
    App->I2C驱动（又分为两层--devicelayer（如何读写数据--比如获取某种传感器数据需要读取对应哪种id的数据）和controllayer--底层发送接收逻辑）
 2. I2C协议介绍--对于常见的通信协议还需要重新出一个汇总介绍详细通信过程以及如何查看波形这里只是暂时回顾i2c
-   1. I2C读操作：！[I2C读操作](./i2c/i2c_read.png)
-   2. I2C写操作：！[I2C写操作](./i2c/i2c_write.png)
-   3. I2C实际通信波形：！[I2C实际通信波形](./i2c/i2c_wave.png)   
+   1. I2C读操作：![I2C读操作](./i2c/i2c_read.png)
+   2. I2C写操作：![I2C写操作](./i2c/i2c_write.png)
+   3. I2C实际通信波形：![I2C实际通信波形](./i2c/i2c_wave.png)   
       发送的第一个字节，前八位是地址，第八位是读或写，后续为正常读写数据
       高低电平在SCL为高电平期间读取SDA电平，SCL为低电平期间改变SDA电平
    
